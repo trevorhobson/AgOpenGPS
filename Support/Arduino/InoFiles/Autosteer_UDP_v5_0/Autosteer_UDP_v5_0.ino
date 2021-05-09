@@ -85,9 +85,12 @@
   uint8_t Ethernet::buffer[200]; // udp send and receive buffer
     
   //loop time variables in microseconds  
-  const uint16_t LOOP_TIME = 25;  //40Hz    
+  const uint16_t LOOP_TIME = 25;  //40H
   uint32_t lastTime = LOOP_TIME;
   uint32_t currentTime = LOOP_TIME;
+
+  const uint16_t HALF_LOOP_TIME = LOOP_TIME / 2;
+  uint32_t halfLastTime = HALF_LOOP_TIME;
 
   const uint16_t WATCHDOG_THRESHOLD = 100;
   const uint16_t WATCHDOG_FORCE_VALUE = WATCHDOG_THRESHOLD + 2; // Should be greater than WATCHDOG_THRESHOLD
@@ -157,6 +160,11 @@
   uint8_t pulseCount = 0; // Steering Wheel Encoder
   bool encEnable = false; //debounce flag
   uint8_t thisEnc = 0, lastEnc = 0;
+
+  uint8_t nrAnalogChannels = 3;
+  uint8_t analogChannel = 2;
+  uint8_t readWAS = 1;
+  int16_t analogValue = 0; //analog value for certain channel
 
    //Variables for settings  
    struct Storage {
@@ -332,6 +340,36 @@
   {
     // Loop triggers every 100 msec and sends back gyro heading, and roll, steer angle etc   
     currentTime = millis();
+
+    if (currentTime - halfLastTime >= HALF_LOOP_TIME)
+    {
+      halfLastTime = currentTime;
+
+      // Read analog channel and trigger for WAS. Only single inputs
+      if (steerConfig.SingleInputWAS)   //Single Input ADS
+      {
+        analogValue = adc.getConversion();
+
+        // Set to trigger for channel 0 (= WAS)
+        adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_0);
+        adc.triggerConversion();  //ADS1115 Single Mode 
+
+        analogValue = (analogValue >> 1); //bit shift by 2  0 to 13610 is 0 to 5v
+        Serial.print("analogValue[");
+        Serial.print(analogChannel);
+        Serial.print("] = ");
+        Serial.println(analogValue);
+
+        analogChannel++;
+
+        // Reset to channelNr
+        if (analogChannel >= nrAnalogChannels)
+        {
+          analogChannel = 1;
+        }
+      }
+
+    }
    
     if (currentTime - lastTime >= LOOP_TIME)
     {
@@ -446,11 +484,30 @@
      //get steering position       
       if (steerConfig.SingleInputWAS)   //Single Input ADS
       {
-        adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_0);        
+        // NOT NEEDED ANYMORE? adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_0);        
         steeringPosition = adc.getConversion();    
-        adc.triggerConversion();//ADS1115 Single Mode 
-         
-         steeringPosition = (steeringPosition >> 1); //bit shift by 2  0 to 13610 is 0 to 5v
+
+        // Set analog channel to read when there are more analog values to be read
+        if (nrAnalogChannels > 0)
+        {
+          if (nrAnalogChannels == 1)
+          {
+            adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_1);
+          }
+
+          if (nrAnalogChannels == 2)
+          {
+            adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_2);
+          }
+
+          if (nrAnalogChannels == 3)
+          {
+            adc.setMux(ADS1115_REG_CONFIG_MUX_SINGLE_3);
+          }
+        }
+
+        adc.triggerConversion();//ADS1115 Single Mode
+        steeringPosition = (steeringPosition >> 1); //bit shift by 2  0 to 13610 is 0 to 5v
       }    
       else    //ADS1115 Differential Mode
       {
