@@ -1,4 +1,7 @@
-void calcSteeringPID(void) 
+#include "Autosteer.hpp"
+#include "AutosteerPID.hpp"
+
+void calcSteeringPID(void)
  {  
   //Proportional only
   pValue = steerSettings.Kp * steerAngleError;
